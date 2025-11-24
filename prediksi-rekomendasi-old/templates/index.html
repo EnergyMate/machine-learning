@@ -191,6 +191,8 @@
       </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
     <script>
       const dayaAlat = {
         microwave: 1000,
@@ -424,8 +426,8 @@
                 result.general_recommendation;
               document.getElementById("fokusArea").innerText =
                 result.focus_area;
-              document.getElementById("rekomSpesifik").innerText =
-                result.specific_recommendation;
+              const rekomSpesifikEl = document.getElementById("rekomSpesifik");
+              rekomSpesifikEl.innerHTML = marked.parse(result.specific_recommendation);
 
               const breakdownList = document.getElementById("breakdownList");
               breakdownList.innerHTML = "";
