@@ -4,8 +4,7 @@
 import joblib
 import numpy as np
 import os
-import json
-import subprocess
+import requests
 from tensorflow.keras.models import load_model
 
 # --- Konfigurasi Model & Data ---
@@ -96,77 +95,39 @@ def get_user_consumption():
 # --- Fungsi Gemini LLM untuk Rekomendasi Dinamis ---
 
 def llm_based_recommendation(pred_kw, usage_kws, category, max_label):
-    """
-    Menghasilkan rekomendasi spesifik via REST API Gemini (curl).
-    """
     api_key = os.environ.get("GEMINI_API_KEY")
     if api_key is None:
-        return f"Area Fokus: {max_label}. Saran: API Key belum diatur (gunakan rekomendasi default)."
+        return f"Area Fokus: {max_label}. Saran: API Key tidak ditemukan."
 
-    breakdown_text = "\n".join([f"- {k}: {v:.2f} kWh" for k, v in usage_kws.items()])
-
-    system_prompt = (
-        "Anda adalah ahli efisiensi energi profesional. "
-        "Berikan rekomendasi sangat spesifik dalam BAHASA INDONESIA, "
-        "maksimal 3 poin, dalam bentuk bullet list yang actionable."
-    )
-
+    # Siapkan prompt dari data
+    breakdown_text = "\n".join([f"- {SUB_LABELS[k]}: {v:.2f} kWh" for k, v in usage_kws.items()])
     user_query = (
-        f"{system_prompt}\n\n"
-        f"Data konsumsi energi:\n"
-        f"Kategori: {category} (Prediksi: {pred_kw:.2f} kWh)\n"
-        f"Area Fokus: {max_label}\n"
-        f"Rincian Penggunaan:\n{breakdown_text}\n"
-        "Berikan rekomendasi."
+        f"Berdasarkan data berikut, berikan 3 rekomendasi spesifik penghematan energi:\n"
+        f"1. Kategori Konsumsi: {category}, Prediksi: {pred_kw:.2f} kWh\n"
+        f"2. Area Fokus: {max_label}\n"
+        f"3. Detail Penggunaan:\n{breakdown_text}"
     )
 
-    request_body = {
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + api_key
+
+    payload = {
         "contents": [
             {
                 "role": "user",
-                "parts": [
-                    {"text": user_query}
-                ]
+                "parts": [{"text": user_query}]
             }
-        ],
-        "generationConfig": {
-            "temperature": 0.7
-        }
+        ]
     }
 
-    MODEL_ID = "gemini-2.0-flash"
-    GENERATE_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_ID}:generateContent?key={api_key}"
-
     try:
-        # Menjalankan curl melalui subprocess
-        process = subprocess.Popen(
-            [
-                "curl", "-s", "-X", "POST",
-                "-H", "Content-Type: application/json",
-                GENERATE_ENDPOINT,
-                "-d", json.dumps(request_body)
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        output, error = process.communicate()
+        res = requests.post(url, json=payload)
+        data = res.json()
 
-        if error:
-            return f"Area Fokus: {max_label}. (Error API: {error.decode('utf-8')})"
-
-        response_json = json.loads(output.decode("utf-8"))
-
-        # Ambil teks hasil rekomendasi
-        text = ""
-        if "candidates" in response_json:
-            parts = response_json["candidates"][0]["content"]["parts"]
-            for p in parts:
-                text += p.get("text", "")
-
-        return text.strip() if text else f"Area Fokus: {max_label}. Tidak ada respon dari API."
+        # Ambil text dari output Gemini
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
     except Exception as e:
-        return f"Area Fokus: {max_label}. (Error: {e})"
+        return f"Area Fokus: {max_label}. Saran: Gagal mendapatkan rekomendasi (Error: {e})"
 
 # --- Fungsi Prediksi dan Rekomendasi Utama ---
 
